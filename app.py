@@ -17,23 +17,49 @@ def home():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    if request.is_json:
+        data = request.json.get('data', {})
+        company = data.get('Company') or data.get('company')
+        ram_val = data.get('Ram') or data.get('ram')
+        weight_val = data.get('Weight') or data.get('weight')
+    else:
+        company = request.form.get('company')
+        ram_val = request.form.get('ram')
+        weight_val = request.form.get('weight')
 
-    data = request.form['data']
+    if not company or ram_val is None or weight_val is None:
+        if request.is_json:
+            return jsonify({'error': 'Missing required fields'}), 400
+        else:
+            return render_template('laptop.html', prediction_text="Error: Missing required inputs.")
 
-    company = data['Company']
-    ram = float(data['Ram'])
-    weight = float(data['Weight'])
+    try:
+        ram = float(ram_val)
+        weight = float(weight_val)
+    except ValueError:
+        if request.is_json:
+            return jsonify({'error': 'Invalid numerical values'}), 400
+        else:
+            return render_template('laptop.html', prediction_text="Error: RAM and Weight must be numbers.")
 
     # Encode company
-    company_encoded = encoders['Company'].transform([company])[0]
+    try:
+        company_encoded = encoders['Company'].transform([company])[0]
+    except ValueError:
+        # Fallback if unknown company (e.g. default to Dell or first class)
+        company_encoded = encoders['Company'].transform(['Dell'])[0]
 
     features = np.array([[company_encoded, ram, weight]])
 
     prediction = laptop_model.predict(features)[0]
 
-    return jsonify({
-        'predicted_price': float(prediction)
-    })
+    if request.is_json:
+        return jsonify({
+            'predicted_price': float(prediction)
+        })
+    else:
+        prediction_text = f"Predicted Price: ₹{prediction:,.2f}"
+        return render_template('laptop.html', prediction_text=prediction_text)
 
 if __name__ == "__main__":
     print("Flask Server Running...")
